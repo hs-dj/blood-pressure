@@ -1,0 +1,1191 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="혈압수첩">
+    <meta name="theme-color" content="#f8fafc">
+    <title>스마트 혈압 수첩</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js for clean, responsive blood pressure trends -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Pretendard Font for crisp Korean readability -->
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Pretendard', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'Roboto', 'sans-serif'],
+                    },
+                    colors: {
+                        medical: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* 모바일 앱 느낌을 위한 기본 스타일 보정 */
+        body {
+            font-family: 'Pretendard', sans-serif;
+            background-color: #f1f5f9;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+        input, textarea {
+            user-select: text;
+        }
+        /* 숫자 입력창 화살표 제거 */
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+        /* 부드러운 스크롤바 숨김 */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="text-slate-800 antialiased flex justify-center min-h-screen">
+
+    <!-- 모바일 앱 컨테이너 (데스크톱에서는 중앙 정렬된 모바일 뷰, 모바일에서는 100% 전체화면) -->
+    <div id="app-container" class="w-full max-w-[480px] bg-slate-50 min-h-screen flex flex-col relative shadow-xl overflow-x-hidden pb-24">
+        
+        <!-- 상단 헤더 -->
+        <header class="sticky top-0 z-20 bg-white/90 backdrop-blur-md border-b border-slate-200/80 px-5 py-3.5 flex items-center justify-between">
+            <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-rose-500 flex items-center justify-center text-white shadow-sm shadow-rose-200">
+                    <i data-lucide="heart-pulse" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold text-slate-900 leading-tight">스마트 혈압 수첩</h1>
+                    <p class="text-xs text-slate-500" id="header-date">오늘의 건강 기록</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <button onclick="openInstallModal()" class="p-2 text-slate-600 hover:bg-slate-100 rounded-xl transition flex items-center gap-1 text-xs font-medium bg-slate-100/80" title="앱처럼 설치하기">
+                    <i data-lucide="smartphone" class="w-4 h-4 text-sky-600"></i>
+                    <span>앱 설치</span>
+                </button>
+                <button onclick="openSettingsModal()" class="p-2 text-slate-600 hover:bg-slate-100 rounded-xl transition" title="데이터 관리">
+                    <i data-lucide="settings" class="w-5 h-5"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- 메인 컨텐츠 영역 -->
+        <main class="flex-1 px-4 pt-4 space-y-5">
+
+            <!-- ================= [TAB 1: 오늘 & 기록하기] ================= -->
+            <section id="tab-home" class="space-y-5">
+                
+                <!-- 오늘의 혈압 요약 카드 (한눈에 보기) -->
+                <div class="bg-white rounded-3xl p-5 shadow-sm border border-slate-200/60">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="text-sm font-semibold text-slate-500 flex items-center gap-1.5">
+                            <i data-lucide="calendar-check" class="w-4 h-4 text-sky-500"></i>
+                            오늘의 혈압 요약
+                        </span>
+                        <span id="today-status-badge" class="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600">
+                            기록 없음
+                        </span>
+                    </div>
+
+                    <div id="today-summary-content">
+                        <!-- JS로 오늘 평균 및 최근 측정치 렌더링 -->
+                    </div>
+                </div>
+
+                <!-- 빠른 혈압 입력 폼 -->
+                <div class="bg-white rounded-3xl p-5 shadow-sm border border-slate-200/60">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-base font-bold text-slate-900 flex items-center gap-1.5">
+                            <i data-lucide="plus-circle" class="w-5 h-5 text-rose-500"></i>
+                            <span id="form-title">새 혈압 기록하기</span>
+                        </h2>
+                        <button type="button" id="cancel-edit-btn" onclick="resetForm()" class="hidden text-xs font-medium text-slate-500 hover:text-slate-800 bg-slate-100 px-2.5 py-1 rounded-lg">
+                            수정 취소
+                        </button>
+                    </div>
+
+                    <form id="bp-form" onsubmit="handleSaveRecord(event)" class="space-y-4">
+                        <input type="hidden" id="record-id" value="">
+
+                        <!-- 수축기 / 이완기 / 맥박 대형 숫자 입력칸 -->
+                        <div class="grid grid-cols-3 gap-2.5">
+                            <!-- 수축기 (최고) -->
+                            <div class="bg-slate-50 rounded-2xl p-3 border border-slate-200/80 focus-within:border-rose-400 focus-within:bg-rose-50/30 transition text-center">
+                                <label for="input-sys" class="block text-xs font-bold text-slate-500 mb-1">수축기 (최고)</label>
+                                <input type="number" id="input-sys" inputmode="numeric" placeholder="120" required min="40" max="300"
+                                    oninput="updateLivePreview()"
+                                    class="w-full bg-transparent text-center text-2xl sm:text-3xl font-extrabold text-slate-900 focus:outline-none">
+                                <span class="text-[11px] text-slate-400 font-medium">mmHg</span>
+                            </div>
+
+                            <!-- 이완기 (최저) -->
+                            <div class="bg-slate-50 rounded-2xl p-3 border border-slate-200/80 focus-within:border-sky-400 focus-within:bg-sky-50/30 transition text-center">
+                                <label for="input-dia" class="block text-xs font-bold text-slate-500 mb-1">이완기 (최저)</label>
+                                <input type="number" id="input-dia" inputmode="numeric" placeholder="80" required min="30" max="200"
+                                    oninput="updateLivePreview()"
+                                    class="w-full bg-transparent text-center text-2xl sm:text-3xl font-extrabold text-slate-900 focus:outline-none">
+                                <span class="text-[11px] text-slate-400 font-medium">mmHg</span>
+                            </div>
+
+                            <!-- 맥박 -->
+                            <div class="bg-slate-50 rounded-2xl p-3 border border-slate-200/80 focus-within:border-emerald-400 focus-within:bg-emerald-50/30 transition text-center">
+                                <label for="input-pulse" class="block text-xs font-bold text-slate-500 mb-1">맥박수</label>
+                                <input type="number" id="input-pulse" inputmode="numeric" placeholder="72" required min="30" max="220"
+                                    class="w-full bg-transparent text-center text-2xl sm:text-3xl font-extrabold text-slate-900 focus:outline-none">
+                                <span class="text-[11px] text-slate-400 font-medium">회/분</span>
+                            </div>
+                        </div>
+
+                        <!-- 실시간 혈압 상태 피드백 배너 -->
+                        <div id="live-feedback-box" class="hidden rounded-2xl p-3.5 text-sm transition-all flex items-start gap-2.5">
+                            <i id="live-feedback-icon" data-lucide="info" class="w-5 h-5 shrink-0 mt-0.5"></i>
+                            <div>
+                                <div class="font-bold" id="live-feedback-title">정상 혈압입니다</div>
+                                <div class="text-xs opacity-90 mt-0.5" id="live-feedback-desc">안정적인 상태입니다. 꾸준히 관리해 주세요.</div>
+                            </div>
+                        </div>
+
+                        <!-- 측정 시간 & 측정 팔 선택 -->
+                        <div class="grid grid-cols-2 gap-2.5">
+                            <div>
+                                <label for="input-datetime" class="block text-xs font-semibold text-slate-500 mb-1">측정 일시</label>
+                                <input type="datetime-local" id="input-datetime" required
+                                    class="w-full bg-slate-50 border border-slate-200/80 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-sky-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-500 mb-1">측정 부위</label>
+                                <div class="grid grid-cols-2 gap-1.5 bg-slate-100 p-1 rounded-xl">
+                                    <button type="button" id="arm-left" onclick="selectArm('왼팔')"
+                                        class="py-1.5 text-xs font-bold rounded-lg bg-white text-slate-900 shadow-sm transition">
+                                        왼팔
+                                    </button>
+                                    <button type="button" id="arm-right" onclick="selectArm('오른팔')"
+                                        class="py-1.5 text-xs font-bold rounded-lg text-slate-500 hover:text-slate-800 transition">
+                                        오른팔
+                                    </button>
+                                </div>
+                                <input type="hidden" id="input-arm" value="왼팔">
+                            </div>
+                        </div>
+
+                        <!-- 상황 태그 빠른 선택 -->
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 mb-1.5">측정 상황 (선택)</label>
+                            <div class="flex flex-wrap gap-1.5" id="tag-container">
+                                <button type="button" onclick="toggleTag(this, '아침 기상 후')" class="tag-btn px-3 py-1.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">🌅 아침 기상 후</button>
+                                <button type="button" onclick="toggleTag(this, '저녁 취침 전')" class="tag-btn px-3 py-1.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">🌙 저녁 취침 전</button>
+                                <button type="button" onclick="toggleTag(this, '약 복용 전')" class="tag-btn px-3 py-1.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">💊 약 복용 전</button>
+                                <button type="button" onclick="toggleTag(this, '약 복용 후')" class="tag-btn px-3 py-1.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">✅ 약 복용 후</button>
+                                <button type="button" onclick="toggleTag(this, '운동/활동 후')" class="tag-btn px-3 py-1.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">🏃 운동 후</button>
+                            </div>
+                        </div>
+
+                        <!-- 간단 메모 -->
+                        <div>
+                            <input type="text" id="input-memo" placeholder="특이사항 메모 (예: 두통 있음, 커피 마심 등)"
+                                class="w-full bg-slate-50 border border-slate-200/80 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-sky-500">
+                        </div>
+
+                        <!-- 저장 버튼 -->
+                        <button type="submit" id="submit-btn"
+                            class="w-full py-3.5 rounded-2xl bg-slate-900 hover:bg-slate-800 active:scale-[0.99] text-white font-bold text-base shadow-md shadow-slate-300 transition flex items-center justify-center gap-2">
+                            <i data-lucide="check" class="w-5 h-5"></i>
+                            <span>혈압 기록 저장하기</span>
+                        </button>
+                    </form>
+                </div>
+
+                <!-- 오늘 기록된 내역 미니 리스트 -->
+                <div class="space-y-2.5">
+                    <div class="flex items-center justify-between px-1">
+                        <h3 class="text-sm font-bold text-slate-700">오늘 측정한 기록</h3>
+                        <button onclick="switchTab('history')" class="text-xs font-semibold text-sky-600 hover:underline">전체 내역 보기 →</button>
+                    </div>
+                    <div id="today-records-list" class="space-y-2.5">
+                        <!-- JS로 오늘 기록 리스트 렌더링 -->
+                    </div>
+                </div>
+
+            </section>
+
+            <!-- ================= [TAB 2: 혈압 추이 & 통계] ================= -->
+            <section id="tab-stats" class="hidden space-y-5">
+                
+                <!-- 기간 선택 탭 -->
+                <div class="bg-white rounded-3xl p-5 shadow-sm border border-slate-200/60 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-base font-bold text-slate-900 flex items-center gap-1.5">
+                            <i data-lucide="trending-up" class="w-5 h-5 text-sky-500"></i>
+                            혈압 변화 그래프
+                        </h2>
+                        <div class="flex bg-slate-100 p-1 rounded-xl text-xs font-bold">
+                            <button onclick="setChartPeriod(7)" id="period-7" class="px-2.5 py-1 rounded-lg bg-white text-slate-900 shadow-sm transition">7일</button>
+                            <button onclick="setChartPeriod(14)" id="period-14" class="px-2.5 py-1 rounded-lg text-slate-500 transition">14일</button>
+                            <button onclick="setChartPeriod(30)" id="period-30" class="px-2.5 py-1 rounded-lg text-slate-500 transition">30일</button>
+                        </div>
+                    </div>
+
+                    <!-- 그래프 캔버스 -->
+                    <div class="relative w-full h-60">
+                        <canvas id="bpChart"></canvas>
+                    </div>
+
+                    <!-- 범례 설명 -->
+                    <div class="flex items-center justify-center gap-4 text-xs font-medium text-slate-500 pt-1">
+                        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>수축기(최고)</span>
+                        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-sky-500"></span>이완기(최저)</span>
+                        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>맥박</span>
+                    </div>
+                </div>
+
+                <!-- 기간 내 평균 요약 -->
+                <div class="bg-white rounded-3xl p-5 shadow-sm border border-slate-200/60 space-y-3">
+                    <h3 class="text-sm font-bold text-slate-700" id="stats-period-title">최근 7일 평균 혈압</h3>
+                    <div class="grid grid-cols-3 gap-2.5 text-center" id="stats-averages">
+                        <!-- JS로 평균 통계 렌더링 -->
+                    </div>
+                </div>
+
+                <!-- 대한고혈압학회 혈압 분류 기준표 안내 -->
+                <div class="bg-white rounded-3xl p-5 shadow-sm border border-slate-200/60 space-y-3">
+                    <h3 class="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                        <i data-lucide="book-open" class="w-4 h-4 text-slate-500"></i>
+                        혈압 수치 판정 기준 안내
+                    </h3>
+                    <div class="space-y-2 text-xs">
+                        <div class="flex items-center justify-between p-2.5 rounded-xl bg-blue-50/70 text-blue-900">
+                            <span class="font-bold">저혈압</span>
+                            <span>수축기 90 미만 또는 이완기 60 미만</span>
+                        </div>
+                        <div class="flex items-center justify-between p-2.5 rounded-xl bg-emerald-50 text-emerald-900">
+                            <span class="font-bold">정상 혈압</span>
+                            <span>수축기 120 미만 그리고 이완기 80 미만</span>
+                        </div>
+                        <div class="flex items-center justify-between p-2.5 rounded-xl bg-amber-50 text-amber-900">
+                            <span class="font-bold">주의 혈압</span>
+                            <span>수축기 120~129 그리고 이완기 80 미만</span>
+                        </div>
+                        <div class="flex items-center justify-between p-2.5 rounded-xl bg-orange-50 text-orange-900">
+                            <span class="font-bold">고혈압 전단계</span>
+                            <span>수축기 130~139 또는 이완기 80~89</span>
+                        </div>
+                        <div class="flex items-center justify-between p-2.5 rounded-xl bg-rose-50 text-rose-900">
+                            <span class="font-bold">고혈압 1기</span>
+                            <span>수축기 140~159 또는 이완기 90~99</span>
+                        </div>
+                        <div class="flex items-center justify-between p-2.5 rounded-xl bg-red-100/80 text-red-950">
+                            <span class="font-bold">고혈압 2기</span>
+                            <span>수축기 160 이상 또는 이완기 100 이상</span>
+                        </div>
+                    </div>
+                </div>
+
+            </section>
+
+            <!-- ================= [TAB 3: 일별 전체 수첩] ================= -->
+            <section id="tab-history" class="hidden space-y-4">
+                <div class="flex items-center justify-between px-1">
+                    <h2 class="text-base font-bold text-slate-900">일별 혈압 수첩</h2>
+                    <span class="text-xs font-medium text-slate-500" id="total-count-label">총 0건</span>
+                </div>
+
+                <!-- 날짜별로 그룹화된 전체 기록 컨테이너 -->
+                <div id="all-history-container" class="space-y-5">
+                    <!-- JS로 날짜별 카드 렌더링 -->
+                </div>
+            </section>
+
+        </main>
+
+        <!-- 하단 네비게이션 바 (모바일 앱 스타일) -->
+        <nav class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-white/95 backdrop-blur-md border-t border-slate-200/80 px-4 py-2 flex justify-around items-center z-30">
+            <button onclick="switchTab('home')" id="nav-home" class="flex flex-col items-center justify-center py-1 px-4 rounded-2xl text-rose-600 font-bold transition">
+                <i data-lucide="pen-square" class="w-6 h-6 mb-0.5"></i>
+                <span class="text-[11px]">오늘/기록</span>
+            </button>
+            <button onclick="switchTab('stats')" id="nav-stats" class="flex flex-col items-center justify-center py-1 px-4 rounded-2xl text-slate-400 hover:text-slate-700 font-medium transition">
+                <i data-lucide="bar-chart-2" class="w-6 h-6 mb-0.5"></i>
+                <span class="text-[11px]">추이/통계</span>
+            </button>
+            <button onclick="switchTab('history')" id="nav-history" class="flex flex-col items-center justify-center py-1 px-4 rounded-2xl text-slate-400 hover:text-slate-700 font-medium transition">
+                <i data-lucide="calendar-days" class="w-6 h-6 mb-0.5"></i>
+                <span class="text-[11px]">일별 수첩</span>
+            </button>
+        </nav>
+
+        <!-- 알림 토스트 메시지 -->
+        <div id="toast" class="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-sm font-semibold px-4 py-2.5 rounded-full shadow-lg opacity-0 pointer-events-none transition-opacity duration-300 flex items-center gap-2">
+            <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400"></i>
+            <span id="toast-message">저장되었습니다.</span>
+        </div>
+
+    </div>
+
+    <!-- ================= [모달 1: 스마트폰 앱처럼 독립 실행하기 안내] ================= -->
+    <div id="install-modal" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs hidden items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-sm w-full p-6 space-y-4 shadow-2xl animate-fade-in">
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                    <i data-lucide="smartphone" class="w-5 h-5 text-sky-600"></i>
+                    모바일 앱으로 설치하기
+                </h3>
+                <button onclick="closeModal('install-modal')" class="p-1.5 rounded-full hover:bg-slate-100 text-slate-500">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <p class="text-xs text-slate-600 leading-relaxed">
+                별도의 앱스토어 다운로드 없이 스마트폰 바탕화면에 추가하면 <strong>인터넷이 없어도 독립적인 모바일 앱</strong>처럼 바로 실행됩니다.
+            </p>
+            <div class="space-y-3 text-xs">
+                <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/70 space-y-1">
+                    <div class="font-bold text-slate-800 flex items-center gap-1.5">
+                        🍎 아이폰 (Safari 브라우저)
+                    </div>
+                    <p class="text-slate-600">1. 화면 하단 가운데 <strong>[공유 버튼 <span class="inline-block px-1 bg-slate-200 rounded">↑</span>]</strong> 터치<br>2. 아래로 내려 <strong>[홈 화면에 추가]</strong> 선택</p>
+                </div>
+                <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/70 space-y-1">
+                    <div class="font-bold text-slate-800 flex items-center gap-1.5">
+                        🤖 갤럭시 / 안드로이드 (Chrome, 삼성인터넷)
+                    </div>
+                    <p class="text-slate-600">1. 우측 상단 또는 하단 <strong>[메뉴 <span class="inline-block px-1 bg-slate-200 rounded">⋮</span>]</strong> 터치<br>2. <strong>[홈 화면에 추가]</strong> 또는 <strong>[앱 설치]</strong> 선택</p>
+                </div>
+            </div>
+            <button onclick="closeModal('install-modal')" class="w-full py-3 rounded-2xl bg-slate-900 text-white font-bold text-sm">
+                확인했습니다
+            </button>
+        </div>
+    </div>
+
+    <!-- ================= [모달 2: 데이터 백업 및 초기화 설정] ================= -->
+    <div id="settings-modal" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs hidden items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-sm w-full p-6 space-y-4 shadow-2xl">
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                    <i data-lucide="database" class="w-5 h-5 text-slate-700"></i>
+                    데이터 관리
+                </h3>
+                <button onclick="closeModal('settings-modal')" class="p-1.5 rounded-full hover:bg-slate-100 text-slate-500">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <p class="text-xs text-slate-500 leading-relaxed">
+                모든 혈압 기록은 외부 서버가 아닌 <strong>현재 사용 중인 기기 내부</strong>에만 안전하게 저장됩니다.
+            </p>
+            <div class="space-y-2.5 pt-1">
+                <button onclick="exportCSV()" class="w-full py-3 px-4 rounded-2xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-sm flex items-center justify-between transition">
+                    <span class="flex items-center gap-2"><i data-lucide="file-spreadsheet" class="w-4 h-4"></i> 엑셀(CSV) 파일로 내보내기</span>
+                    <i data-lucide="download" class="w-4 h-4"></i>
+                </button>
+                <button onclick="loadSampleData()" class="w-full py-3 px-4 rounded-2xl bg-sky-50 hover:bg-sky-100 text-sky-800 font-bold text-sm flex items-center justify-between transition">
+                    <span class="flex items-center gap-2"><i data-lucide="sparkles" class="w-4 h-4"></i> 체험용 샘플 데이터 채우기</span>
+                    <i data-lucide="plus" class="w-4 h-4"></i>
+                </button>
+                <button onclick="confirmClearAll()" id="clear-data-btn" class="w-full py-3 px-4 rounded-2xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-sm flex items-center justify-between transition">
+                    <span class="flex items-center gap-2"><i data-lucide="trash-2" class="w-4 h-4"></i> 모든 기록 초기화</span>
+                    <span class="text-xs font-normal" id="clear-confirm-hint">터치하여 삭제</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= [삭제 확인 인라인 모달] ================= -->
+    <div id="delete-modal" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs hidden items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-xs w-full p-5 space-y-4 shadow-2xl text-center">
+            <div class="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+                <i data-lucide="trash-2" class="w-6 h-6"></i>
+            </div>
+            <div>
+                <h4 class="text-base font-bold text-slate-900">이 기록을 삭제할까요?</h4>
+                <p class="text-xs text-slate-500 mt-1">삭제된 혈압 기록은 복구할 수 없습니다.</p>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+                <button onclick="closeModal('delete-modal')" class="py-2.5 rounded-xl bg-slate-100 text-slate-700 font-bold text-sm">취소</button>
+                <button id="confirm-delete-btn" class="py-2.5 rounded-xl bg-rose-600 text-white font-bold text-sm">삭제하기</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 1. 상태 및 데이터 관리 (LocalStorage 기반)
+        // ==========================================
+        const STORAGE_KEY = 'smart_bp_records_v1';
+        let records = [];
+        let selectedTags = new Set();
+        let currentChartPeriod = 7;
+        let bpChartInstance = null;
+        let clearConfirmStep = false;
+
+        // 페이지 로드 시 초기화
+        window.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            initDateTimeInput();
+            loadRecords();
+            
+            // 최초 실행 시 데이터가 전혀 없다면 사용자가 한눈에 앱 기능을 파악할 수 있도록 최근 며칠간의 샘플 데이터 자동 생성
+            if (records.length === 0 && !localStorage.getItem('smart_bp_initialized')) {
+                generateInitialSampleData();
+                localStorage.setItem('smart_bp_initialized', 'true');
+            }
+
+            updateHeaderDate();
+            renderAll();
+        });
+
+        // 로컬 스토리지에서 데이터 불러오기
+        function loadRecords() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                records = raw ? JSON.parse(raw) : [];
+                // 최신순 정렬
+                records.sort((a, b) => new Date(b.datetime) - new Date(a.datetime));
+            } catch (e) {
+                console.error('데이터 로드 오류:', e);
+                records = [];
+            }
+        }
+
+        // 로컬 스토리지에 저장
+        function saveRecords() {
+            records.sort((a, b) => new Date(b.datetime) - new Date(a.datetime));
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+            renderAll();
+        }
+
+        // 체험용 샘플 데이터 생성 (오늘 포함 최근 7일)
+        function generateInitialSampleData() {
+            const now = new Date();
+            const samples = [
+                { dayOffset: 0, hour: 7, min: 30, sys: 122, dia: 78, pulse: 68, arm: '왼팔', tags: ['아침 기상 후', '약 복용 전'], memo: '컨디션 양호' },
+                { dayOffset: 1, hour: 21, min: 15, sys: 118, dia: 76, pulse: 72, arm: '왼팔', tags: ['저녁 취침 전'], memo: '' },
+                { dayOffset: 1, hour: 8, min: 0, sys: 126, dia: 82, pulse: 70, arm: '왼팔', tags: ['아침 기상 후'], memo: '약간 피곤함' },
+                { dayOffset: 2, hour: 19, min: 40, sys: 132, dia: 84, pulse: 78, arm: '오른팔', tags: ['운동/활동 후'], memo: '산책 30분 후 측정' },
+                { dayOffset: 3, hour: 7, min: 45, sys: 119, dia: 75, pulse: 66, arm: '왼팔', tags: ['아침 기상 후', '약 복용 후'], memo: '' },
+                { dayOffset: 5, hour: 8, min: 10, sys: 128, dia: 81, pulse: 74, arm: '왼팔', tags: ['아침 기상 후'], memo: '' },
+                { dayOffset: 6, hour: 20, min: 30, sys: 116, dia: 74, pulse: 69, arm: '왼팔', tags: ['저녁 취침 전'], memo: '' }
+            ];
+
+            records = samples.map((s, idx) => {
+                const d = new Date(now);
+                d.setDate(d.getDate() - s.dayOffset);
+                d.setHours(s.hour, s.min, 0, 0);
+                // 로컬 시간 포맷 YYYY-MM-DDTHH:mm
+                const localISO = toLocalISOString(d);
+                return {
+                    id: 'sample_' + Date.now() + '_' + idx,
+                    sys: s.sys,
+                    dia: s.dia,
+                    pulse: s.pulse,
+                    datetime: localISO,
+                    arm: s.arm,
+                    tags: s.tags,
+                    memo: s.memo
+                };
+            });
+            saveRecords();
+        }
+
+        // ==========================================
+        // 2. 혈압 판정 로직 (대한고혈압학회 기준)
+        // ==========================================
+        function evaluateBP(sys, dia) {
+            if (sys < 90 || dia < 60) {
+                return {
+                    label: '저혈압',
+                    colorClass: 'bg-blue-100 text-blue-800 border-blue-200',
+                    badgeClass: 'bg-blue-100 text-blue-700',
+                    dotColor: '#2563eb',
+                    desc: '혈압이 다소 낮습니다. 어지러움이 있다면 휴식을 취하세요.'
+                };
+            }
+            if (sys >= 160 || dia >= 100) {
+                return {
+                    label: '고혈압 2기',
+                    colorClass: 'bg-red-100 text-red-900 border-red-300',
+                    badgeClass: 'bg-red-100 text-red-700',
+                    dotColor: '#dc2626',
+                    desc: '혈압이 매우 높습니다. 안정을 취하시고 전문의 상담을 권장합니다.'
+                };
+            }
+            if (sys >= 140 || dia >= 90) {
+                return {
+                    label: '고혈압 1기',
+                    colorClass: 'bg-rose-100 text-rose-900 border-rose-200',
+                    badgeClass: 'bg-rose-100 text-rose-700',
+                    dotColor: '#e11d48',
+                    desc: '고혈압 범위입니다. 식습관 관리와 꾸준한 측정이 필요합니다.'
+                };
+            }
+            if ((sys >= 130 && sys <= 139) || (dia >= 80 && dia <= 89)) {
+                return {
+                    label: '고혈압 전단계',
+                    colorClass: 'bg-orange-100 text-orange-900 border-orange-200',
+                    badgeClass: 'bg-orange-100 text-orange-700',
+                    dotColor: '#ea580c',
+                    desc: '정상보다 약간 높습니다. 저염식과 가벼운 유산소 운동이 도움됩니다.'
+                };
+            }
+            if (sys >= 120 && sys <= 129 && dia < 80) {
+                return {
+                    label: '주의 혈압',
+                    colorClass: 'bg-amber-100 text-amber-900 border-amber-200',
+                    badgeClass: 'bg-amber-100 text-amber-700',
+                    dotColor: '#d97706',
+                    desc: '수축기 혈압이 주의 단계입니다. 규칙적인 생활 습관을 유지하세요.'
+                };
+            }
+            return {
+                label: '정상 혈압',
+                colorClass: 'bg-emerald-100 text-emerald-900 border-emerald-200',
+                badgeClass: 'bg-emerald-100 text-emerald-700',
+                dotColor: '#059669',
+                desc: '매우 건강한 정상 혈압입니다! 지금처럼 꾸준히 관리하세요.'
+            };
+        }
+
+        // ==========================================
+        // 3. 입력 폼 인터랙션 및 저장
+        // ==========================================
+        function toLocalISOString(date) {
+            const offset = date.getTimezoneOffset() * 60000;
+            return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+        }
+
+        function initDateTimeInput() {
+            document.getElementById('input-datetime').value = toLocalISOString(new Date());
+        }
+
+        function updateHeaderDate() {
+            const now = new Date();
+            const days = ['일', '월', '화', '수', '목', '금', '토'];
+            const str = `${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일 (${days[now.getDay()]})`;
+            document.getElementById('header-date').textContent = str;
+        }
+
+        function selectArm(arm) {
+            document.getElementById('input-arm').value = arm;
+            const btnLeft = document.getElementById('arm-left');
+            const btnRight = document.getElementById('arm-right');
+            if (arm === '왼팔') {
+                btnLeft.className = 'py-1.5 text-xs font-bold rounded-lg bg-white text-slate-900 shadow-sm transition';
+                btnRight.className = 'py-1.5 text-xs font-bold rounded-lg text-slate-500 hover:text-slate-800 transition';
+            } else {
+                btnRight.className = 'py-1.5 text-xs font-bold rounded-lg bg-white text-slate-900 shadow-sm transition';
+                btnLeft.className = 'py-1.5 text-xs font-bold rounded-lg text-slate-500 hover:text-slate-800 transition';
+            }
+        }
+
+        function toggleTag(btn, tag) {
+            if (selectedTags.has(tag)) {
+                selectedTags.delete(tag);
+                btn.classList.remove('bg-sky-600', 'text-white');
+                btn.classList.add('bg-slate-100', 'text-slate-600');
+            } else {
+                selectedTags.add(tag);
+                btn.classList.remove('bg-slate-100', 'text-slate-600');
+                btn.classList.add('bg-sky-600', 'text-white');
+            }
+        }
+
+        function updateLivePreview() {
+            const sys = parseInt(document.getElementById('input-sys').value);
+            const dia = parseInt(document.getElementById('input-dia').value);
+            const box = document.getElementById('live-feedback-box');
+            
+            if (!sys || !dia || sys < 40 || dia < 30) {
+                box.classList.add('hidden');
+                return;
+            }
+
+            const status = evaluateBP(sys, dia);
+            box.className = `rounded-2xl p-3.5 text-sm transition-all flex items-start gap-2.5 border ${status.colorClass}`;
+            document.getElementById('live-feedback-title').textContent = `${status.label} (${sys}/${dia} mmHg)`;
+            document.getElementById('live-feedback-desc').textContent = status.desc;
+            box.classList.remove('hidden');
+        }
+
+        function handleSaveRecord(e) {
+            e.preventDefault();
+            const id = document.getElementById('record-id').value;
+            const sys = parseInt(document.getElementById('input-sys').value);
+            const dia = parseInt(document.getElementById('input-dia').value);
+            const pulse = parseInt(document.getElementById('input-pulse').value);
+            const datetime = document.getElementById('input-datetime').value;
+            const arm = document.getElementById('input-arm').value;
+            const memo = document.getElementById('input-memo').value.trim();
+
+            if (!sys || !dia || !pulse || !datetime) return;
+
+            const recordData = {
+                id: id || 'bp_' + Date.now(),
+                sys,
+                dia,
+                pulse,
+                datetime,
+                arm,
+                tags: Array.from(selectedTags),
+                memo
+            };
+
+            if (id) {
+                const idx = records.findIndex(r => r.id === id);
+                if (idx !== -1) records[idx] = recordData;
+                showToast('혈압 기록이 수정되었습니다.');
+            } else {
+                records.unshift(recordData);
+                showToast('오늘의 혈압이 기록되었습니다.');
+            }
+
+            saveRecords();
+            resetForm();
+        }
+
+        function resetForm() {
+            document.getElementById('bp-form').reset();
+            document.getElementById('record-id').value = '';
+            document.getElementById('form-title').textContent = '새 혈압 기록하기';
+            document.getElementById('submit-btn').innerHTML = '<i data-lucide="check" class="w-5 h-5"></i><span>혈압 기록 저장하기</span>';
+            document.getElementById('cancel-edit-btn').classList.add('hidden');
+            document.getElementById('live-feedback-box').classList.add('hidden');
+            
+            selectedTags.clear();
+            document.querySelectorAll('.tag-btn').forEach(btn => {
+                btn.classList.remove('bg-sky-600', 'text-white');
+                btn.classList.add('bg-slate-100', 'text-slate-600');
+            });
+
+            selectArm('왼팔');
+            initDateTimeInput();
+            lucide.createIcons();
+        }
+
+        function editRecord(id) {
+            const rec = records.find(r => r.id === id);
+            if (!rec) return;
+
+            switchTab('home');
+            document.getElementById('record-id').value = rec.id;
+            document.getElementById('input-sys').value = rec.sys;
+            document.getElementById('input-dia').value = rec.dia;
+            document.getElementById('input-pulse').value = rec.pulse;
+            document.getElementById('input-datetime').value = rec.datetime;
+            document.getElementById('input-memo').value = rec.memo || '';
+            selectArm(rec.arm || '왼팔');
+
+            selectedTags.clear();
+            document.querySelectorAll('.tag-btn').forEach(btn => {
+                const tagName = btn.textContent.replace(/^[^\s]+\s/, '').trim();
+                // 버튼 텍스트 매칭
+                const matched = (rec.tags || []).find(t => btn.textContent.includes(t));
+                if (matched) {
+                    selectedTags.add(matched);
+                    btn.classList.remove('bg-slate-100', 'text-slate-600');
+                    btn.classList.add('bg-sky-600', 'text-white');
+                } else {
+                    btn.classList.remove('bg-sky-600', 'text-white');
+                    btn.classList.add('bg-slate-100', 'text-slate-600');
+                }
+            });
+
+            document.getElementById('form-title').textContent = '혈압 기록 수정하기';
+            document.getElementById('submit-btn').innerHTML = '<i data-lucide="check" class="w-5 h-5"></i><span>수정 내용 저장하기</span>';
+            document.getElementById('cancel-edit-btn').classList.remove('hidden');
+            updateLivePreview();
+            lucide.createIcons();
+
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // ==========================================
+        // 4. 화면 렌더링 (오늘 요약 / 일별 리스트 / 차트)
+        // ==========================================
+        function renderAll() {
+            renderTodaySummary();
+            renderTodayList();
+            renderAllHistory();
+            if (!document.getElementById('tab-stats').classList.contains('hidden')) {
+                renderChart();
+            }
+        }
+
+        // 오늘 날짜 문자열 (YYYY-MM-DD)
+        function getTodayStr() {
+            return toLocalISOString(new Date()).slice(0, 10);
+        }
+
+        // 오늘의 요약 카드 렌더링
+        function renderTodaySummary() {
+            const todayStr = getTodayStr();
+            const todayRecs = records.filter(r => r.datetime.startsWith(todayStr));
+            const container = document.getElementById('today-summary-content');
+            const badge = document.getElementById('today-status-badge');
+
+            if (todayRecs.length === 0) {
+                badge.textContent = '미측정';
+                badge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-500';
+                container.innerHTML = `
+                    <div class="py-4 text-center space-y-1">
+                        <p class="text-base font-bold text-slate-700">아직 오늘 기록된 혈압이 없어요</p>
+                        <p class="text-xs text-slate-400">아래 입력창에 수축기, 이완기, 맥박을 입력해 주세요.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // 오늘 평균 계산
+            const avgSys = Math.round(todayRecs.reduce((sum, r) => sum + r.sys, 0) / todayRecs.length);
+            const avgDia = Math.round(todayRecs.reduce((sum, r) => sum + r.dia, 0) / todayRecs.length);
+            const avgPulse = Math.round(todayRecs.reduce((sum, r) => sum + r.pulse, 0) / todayRecs.length);
+            const status = evaluateBP(avgSys, avgDia);
+
+            badge.textContent = status.label;
+            badge.className = `px-2.5 py-1 rounded-full text-xs font-bold ${status.badgeClass}`;
+
+            container.innerHTML = `
+                <div class="flex items-end justify-between pt-1">
+                    <div>
+                        <div class="text-xs text-slate-400 font-medium mb-1">오늘 평균 (${todayRecs.length}회 측정)</div>
+                        <div class="flex items-baseline gap-1.5">
+                            <span class="text-3xl font-extrabold text-slate-900 tracking-tight">${avgSys}</span>
+                            <span class="text-xl font-bold text-slate-400">/</span>
+                            <span class="text-3xl font-extrabold text-slate-900 tracking-tight">${avgDia}</span>
+                            <span class="text-xs font-semibold text-slate-500 ml-0.5">mmHg</span>
+                        </div>
+                    </div>
+                    <div class="text-right bg-slate-50 px-3.5 py-2 rounded-2xl border border-slate-100">
+                        <div class="text-[11px] text-slate-400 font-medium">평균 맥박</div>
+                        <div class="text-lg font-extrabold text-emerald-600 flex items-center justify-end gap-1">
+                            <i data-lucide="activity" class="w-4 h-4"></i>
+                            ${avgPulse} <span class="text-xs font-normal text-slate-500">bpm</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            lucide.createIcons();
+        }
+
+        // 오늘 측정한 기록 리스트
+        function renderTodayList() {
+            const todayStr = getTodayStr();
+            const todayRecs = records.filter(r => r.datetime.startsWith(todayStr));
+            const listEl = document.getElementById('today-records-list');
+
+            if (todayRecs.length === 0) {
+                listEl.innerHTML = `
+                    <div class="bg-white/60 rounded-2xl p-4 text-center text-xs text-slate-400 border border-dashed border-slate-200">
+                        오늘 측정 내역이 여기에 표시됩니다.
+                    </div>
+                `;
+                return;
+            }
+
+            listEl.innerHTML = todayRecs.map(rec => createRecordCardHTML(rec, false)).join('');
+            lucide.createIcons();
+        }
+
+        // 전체 내역 (날짜별 그룹화하여 일별 비교 용이)
+        function renderAllHistory() {
+            const container = document.getElementById('all-history-container');
+            document.getElementById('total-count-label').textContent = `총 ${records.length}건`;
+
+            if (records.length === 0) {
+                container.innerHTML = `
+                    <div class="bg-white rounded-3xl p-10 text-center space-y-2 border border-slate-200/60">
+                        <i data-lucide="clipboard-list" class="w-10 h-10 text-slate-300 mx-auto"></i>
+                        <p class="text-sm font-bold text-slate-600">저장된 혈압 기록이 없습니다</p>
+                        <p class="text-xs text-slate-400">오늘/기록 탭에서 첫 혈압을 기록해 보세요.</p>
+                    </div>
+                `;
+                lucide.createIcons();
+                return;
+            }
+
+            // 날짜별 그룹화
+            const grouped = {};
+            records.forEach(rec => {
+                const dateKey = rec.datetime.slice(0, 10);
+                if (!grouped[dateKey]) grouped[dateKey] = [];
+                grouped[dateKey].push(rec);
+            });
+
+            const days = ['일', '월', '화', '수', '목', '금', '토'];
+            const todayStr = getTodayStr();
+
+            container.innerHTML = Object.keys(grouped).map(dateKey => {
+                const dayRecs = grouped[dateKey];
+                const d = new Date(dateKey + 'T00:00:00');
+                const dayName = days[d.getDay()];
+                const isToday = dateKey === todayStr;
+                const dateLabel = isToday 
+                    ? `오늘 · ${d.getMonth() + 1}월 ${d.getDate()}일 (${dayName})` 
+                    : `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 (${dayName})`;
+
+                // 해당 일자 평균 계산
+                const avgSys = Math.round(dayRecs.reduce((s, r) => s + r.sys, 0) / dayRecs.length);
+                const avgDia = Math.round(dayRecs.reduce((s, r) => s + r.dia, 0) / dayRecs.length);
+                const dayStatus = evaluateBP(avgSys, avgDia);
+
+                return `
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between px-1">
+                            <span class="text-xs font-bold text-slate-700">${dateLabel}</span>
+                            <span class="text-[11px] font-semibold text-slate-500">
+                                일평균 <strong class="text-slate-800">${avgSys}/${avgDia}</strong> (${dayStatus.label})
+                            </span>
+                        </div>
+                        <div class="space-y-2">
+                            ${dayRecs.map(rec => createRecordCardHTML(rec, true)).join('')}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            lucide.createIcons();
+        }
+
+        // 개별 기록 카드 HTML 생성
+        function createRecordCardHTML(rec, showActions) {
+            const status = evaluateBP(rec.sys, rec.dia);
+            const timePart = rec.datetime.slice(11, 16);
+            const [hourStr, minStr] = timePart.split(':');
+            const hour = parseInt(hourStr);
+            const ampm = hour < 12 ? '오전' : '오후';
+            const displayHour = hour === 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+            const formattedTime = `${ampm} ${displayHour}:${minStr}`;
+
+            const tagsHTML = (rec.tags && rec.tags.length > 0)
+                ? `<div class="flex flex-wrap gap-1 mt-2">
+                    ${rec.tags.map(t => `<span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[11px] font-medium">${t}</span>`).join('')}
+                   </div>`
+                : '';
+
+            const memoHTML = rec.memo
+                ? `<p class="text-xs text-slate-500 mt-1.5 bg-slate-50 px-2.5 py-1.5 rounded-lg">💬 ${escapeHTML(rec.memo)}</p>`
+                : '';
+
+            return `
+                <div class="bg-white rounded-2xl p-4 shadow-xs border border-slate-200/70 transition hover:border-slate-300">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-bold text-slate-500">${formattedTime}</span>
+                            <span class="text-[11px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 font-medium">${rec.arm || '왼팔'}</span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="px-2 py-0.5 rounded-full text-[11px] font-bold ${status.badgeClass}">${status.label}</span>
+                            <button onclick="editRecord('${rec.id}')" class="p-1 text-slate-400 hover:text-sky-600 rounded-lg" title="수정">
+                                <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
+                            </button>
+                            <button onclick="openDeleteModal('${rec.id}')" class="p-1 text-slate-400 hover:text-rose-600 rounded-lg" title="삭제">
+                                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="flex items-baseline justify-between mt-2">
+                        <div class="flex items-baseline gap-1">
+                            <span class="text-2xl font-extrabold text-slate-900">${rec.sys}</span>
+                            <span class="text-base font-bold text-slate-400">/</span>
+                            <span class="text-2xl font-extrabold text-slate-900">${rec.dia}</span>
+                            <span class="text-xs text-slate-400 font-medium ml-0.5">mmHg</span>
+                        </div>
+                        <div class="text-sm font-bold text-emerald-600 flex items-center gap-1">
+                            <i data-lucide="heart" class="w-3.5 h-3.5 fill-emerald-500 text-emerald-500"></i>
+                            ${rec.pulse} <span class="text-xs font-normal text-slate-400">bpm</span>
+                        </div>
+                    </div>
+                    ${tagsHTML}
+                    ${memoHTML}
+                </div>
+            `;
+        }
+
+        // ==========================================
+        // 5. 추이 그래프 및 통계 렌더링 (Chart.js)
+        // ==========================================
+        function setChartPeriod(days) {
+            currentChartPeriod = days;
+            [7, 14, 30].forEach(d => {
+                const btn = document.getElementById(`period-${d}`);
+                if (d === days) {
+                    btn.className = 'px-2.5 py-1 rounded-lg bg-white text-slate-900 shadow-sm transition';
+                } else {
+                    btn.className = 'px-2.5 py-1 rounded-lg text-slate-500 transition';
+                }
+            });
+            renderChart();
+        }
+
+        function renderChart() {
+            const cutoff = new Date();
+            cutoff.setDate(cutoff.getDate() - currentChartPeriod);
+            cutoff.setHours(0, 0, 0, 0);
+
+            const filtered = records.filter(r => new Date(r.datetime) >= cutoff);
+            document.getElementById('stats-period-title').textContent = `최근 ${currentChartPeriod}일 평균 수치 (${filtered.length}회 측정)`;
+
+            // 평균 요약 박스 업데이트
+            const avgContainer = document.getElementById('stats-averages');
+            if (filtered.length === 0) {
+                avgContainer.innerHTML = `<div class="col-span-3 py-4 text-xs text-slate-400">해당 기간의 기록이 없습니다.</div>`;
+            } else {
+                const avgSys = Math.round(filtered.reduce((s, r) => s + r.sys, 0) / filtered.length);
+                const avgDia = Math.round(filtered.reduce((s, r) => s + r.dia, 0) / filtered.length);
+                const avgPulse = Math.round(filtered.reduce((s, r) => s + r.pulse, 0) / filtered.length);
+                avgContainer.innerHTML = `
+                    <div class="bg-rose-50/70 rounded-2xl p-3">
+                        <div class="text-[11px] font-bold text-rose-700">평균 수축기</div>
+                        <div class="text-xl font-extrabold text-rose-900 mt-0.5">${avgSys}</div>
+                        <div class="text-[10px] text-rose-500">mmHg</div>
+                    </div>
+                    <div class="bg-sky-50/70 rounded-2xl p-3">
+                        <div class="text-[11px] font-bold text-sky-700">평균 이완기</div>
+                        <div class="text-xl font-extrabold text-sky-900 mt-0.5">${avgDia}</div>
+                        <div class="text-[10px] text-sky-500">mmHg</div>
+                    </div>
+                    <div class="bg-emerald-50/70 rounded-2xl p-3">
+                        <div class="text-[11px] font-bold text-emerald-700">평균 맥박</div>
+                        <div class="text-xl font-extrabold text-emerald-900 mt-0.5">${avgPulse}</div>
+                        <div class="text-[10px] text-emerald-500">회/분</div>
+                    </div>
+                `;
+            }
+
+            // 날짜별 평균으로 데이터 정리 (오름차순)
+            const dailyMap = {};
+            filtered.slice().reverse().forEach(r => {
+                const dayKey = r.datetime.slice(5, 10).replace('-', '/'); // MM/DD
+                if (!dailyMap[dayKey]) dailyMap[dayKey] = { sys: [], dia: [], pulse: [] };
+                dailyMap[dayKey].sys.push(r.sys);
+                dailyMap[dayKey].dia.push(r.dia);
+                dailyMap[dayKey].pulse.push(r.pulse);
+            });
+
+            const labels = Object.keys(dailyMap);
+            const sysData = labels.map(k => Math.round(dailyMap[k].sys.reduce((a, b) => a + b, 0) / dailyMap[k].sys.length));
+            const diaData = labels.map(k => Math.round(dailyMap[k].dia.reduce((a, b) => a + b, 0) / dailyMap[k].dia.length));
+            const pulseData = labels.map(k => Math.round(dailyMap[k].pulse.reduce((a, b) => a + b, 0) / dailyMap[k].pulse.length));
+
+            const ctx = document.getElementById('bpChart').getContext('2d');
+            if (bpChartInstance) {
+                bpChartInstance.destroy();
+            }
+
+            bpChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels.length ? labels : ['데이터 없음'],
+                    datasets: [
+                        {
+                            label: '수축기',
+                            data: sysData,
+                            borderColor: '#f43f5e',
+                            backgroundColor: '#f43f5e',
+                            borderWidth: 2.5,
+                            pointRadius: 4,
+                            tension: 0.3
+                        },
+                        {
+                            label: '이완기',
+                            data: diaData,
+                            borderColor: '#0ea5e9',
+                            backgroundColor: '#0ea5e9',
+                            borderWidth: 2.5,
+                            pointRadius: 4,
+                            tension: 0.3
+                        },
+                        {
+                            label: '맥박',
+                            data: pulseData,
+                            borderColor: '#10b981',
+                            backgroundColor: '#10b981',
+                            borderWidth: 2,
+                            borderDash: [4, 4],
+                            pointRadius: 3,
+                            tension: 0.3
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                            padding: 10,
+                            cornerRadius: 10
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: { font: { size: 11 } }
+                        },
+                        y: {
+                            min: 40,
+                            suggestedMax: 160,
+                            grid: { color: '#f1f5f9' },
+                            ticks: { font: { size: 11 } }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ==========================================
+        // 6. 탭 전환 및 모달 / 유틸리티
+        // ==========================================
+        function switchTab(tabName) {
+            ['home', 'stats', 'history'].forEach(t => {
+                const sec = document.getElementById(`tab-${t}`);
+                const nav = document.getElementById(`nav-${t}`);
+                if (t === tabName) {
+                    sec.classList.remove('hidden');
+                    nav.classList.remove('text-slate-400', 'font-medium');
+                    nav.classList.add('text-rose-600', 'font-bold');
+                } else {
+                    sec.classList.add('hidden');
+                    nav.classList.remove('text-rose-600', 'font-bold');
+                    nav.classList.add('text-slate-400', 'font-medium');
+                }
+            });
+
+            if (tabName === 'stats') {
+                renderChart();
+            }
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function openInstallModal() {
+            const m = document.getElementById('install-modal');
+            m.classList.remove('hidden');
+            m.classList.add('flex');
+        }
+
+        function openSettingsModal() {
+            clearConfirmStep = false;
+            document.getElementById('clear-confirm-hint').textContent = '터치하여 삭제';
+            const m = document.getElementById('settings-modal');
+            m.classList.remove('hidden');
+            m.classList.add('flex');
+        }
+
+        function openDeleteModal(id) {
+            const m = document.getElementById('delete-modal');
+            const btn = document.getElementById('confirm-delete-btn');
+            btn.onclick = () => {
+                records = records.filter(r => r.id !== id);
+                saveRecords();
+                closeModal('delete-modal');
+                showToast('기록이 삭제되었습니다.');
+            };
+            m.classList.remove('hidden');
+            m.classList.add('flex');
+        }
+
+        function closeModal(id) {
+            const m = document.getElementById(id);
+            m.classList.add('hidden');
+            m.classList.remove('flex');
+        }
+
+        // 엑셀(CSV) 내보내기
+        function exportCSV() {
+            if (records.length === 0) {
+                showToast('내보낼 기록이 없습니다.');
+                return;
+            }
+            const headers = ['측정일시', '수축기(mmHg)', '이완기(mmHg)', '맥박(bpm)', '판정결과', '측정부위', '상황태그', '메모'];
+            const rows = records.map(r => {
+                const status = evaluateBP(r.sys, r.dia).label;
+                return [
+                    r.datetime.replace('T', ' '),
+                    r.sys,
+                    r.dia,
+                    r.pulse,
+                    status,
+                    r.arm || '왼팔',
+                    (r.tags || []).join('/'),
+                    `"${(r.memo || '').replace(/"/g, '""')}"`
+                ].join(',');
+            });
+
+            const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `혈압기록수첩_${getTodayStr()}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+            closeModal('settings-modal');
+            showToast('CSV 파일이 다운로드되었습니다.');
+        }
+
+        function loadSampleData() {
+            generateInitialSampleData();
+            closeModal('settings-modal');
+            showToast('샘플 데이터가 채워졌습니다.');
+        }
+
+        function confirmClearAll() {
+            if (!clearConfirmStep) {
+                clearConfirmStep = true;
+                document.getElementById('clear-confirm-hint').textContent = '한 번 더 터치하면 전체 삭제';
+                return;
+            }
+            records = [];
+            saveRecords();
+            closeModal('settings-modal');
+            showToast('모든 기록이 초기화되었습니다.');
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-message').textContent = msg;
+            toast.classList.remove('opacity-0');
+            setTimeout(() => {
+                toast.classList.add('opacity-0');
+            }, 2400);
+        }
+
+        function escapeHTML(str) {
+            return str.replace(/[&<>'"]/g, tag => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                "'": '&#39;',
+                '"': '&quot;'
+            }[tag]));
+        }
+    </script>
+</body>
+</html>
